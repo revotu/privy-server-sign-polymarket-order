@@ -1,0 +1,38 @@
+# ============================================================
+# Python 后端依赖 / Python Backend Dependencies
+# ============================================================
+# 安装命令 / Install: pip install -r requirements.txt
+# 建议使用虚拟环境 / Recommended: use a virtual environment
+#   python -m venv venv && source venv/bin/activate  (macOS/Linux)
+#   python -m venv venv && venv\Scripts\activate     (Windows)
+# ============================================================
+
+# Web 框架 / Web Framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+
+# 数据验证 / Data Validation
+pydantic==2.10.4
+pydantic-settings==2.7.0
+
+# HTTP 客户端 / HTTP Client
+httpx[socks]==0.28.1
+
+# 加密库（P256 签名）/ Cryptography (P256 signing)
+cryptography==44.0.0
+
+# Polymarket 订单工具 / Polymarket Order Utilities
+py-order-utils==0.3.0
+py-clob-client==0.18.0
+
+# Ethereum 工具（EIP-712 类型数据构建）/ Ethereum utilities (EIP-712 typed data)
+eth-account==0.13.4
+web3==7.6.0
+
+# 测试 / Testing
+pytest==8.3.4
+pytest-asyncio==0.25.0
+pytest-httpx==0.35.0
+
+# 环境变量加载 / Environment variable loading
+python-dotenv==1.0.1

@@ -1,0 +1,42 @@
+name: privy_polymarket_demo
+description: >
+  Privy 服务端签名 × Polymarket 无弹窗下单 Flutter Demo
+  Privy server-side signing × Polymarket no-popup order Flutter demo
+
+# 防止意外发布到 pub.dev / Prevent accidental publishing to pub.dev
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+  flutter: '>=3.16.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Privy Flutter SDK
+  # 官方 Privy Flutter SDK / Official Privy Flutter SDK
+  # 文档 / Docs: https://docs.privy.io/sdks/flutter/setup
+  privy: ^1.0.0
+
+  # HTTP 客户端（调用后端 API）/ HTTP client (for backend API calls)
+  http: ^1.2.0
+
+  # 状态管理 / State management
+  provider: ^6.1.1
+
+  # 本地存储（存储 CLOB API 凭据等）/ Local storage (store CLOB credentials etc.)
+  shared_preferences: ^2.3.2
+
+  # 图标 / Icons
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

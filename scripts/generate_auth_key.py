@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""
+Privy Authorization Key Generator
+===================================
+一次性脚本：生成 P256（prime256v1）密钥对，输出 Privy 所需格式。
+One-time script: generates a P256 keypair in the format required by Privy.
+
+使用方法 / Usage:
+    python scripts/generate_auth_key.py
+
+输出 / Output:
+    - 打印 wallet-auth: 前缀的私钥（存入 .env 的 PRIVY_AUTHORIZATION_KEY）
+    - 打印 base64 DER 公钥（注册到 Privy Dashboard 的 Authorization Keys 页面）
+
+重要说明 / Important Notes:
+    - Privy 不存储你的私钥，丢失无法找回 / Privy does not store your private key; it cannot be recovered if lost
+    - 请将私钥存储在安全位置（环境变量、AWS KMS 等）/ Store the private key securely (env var, AWS KMS, etc.)
+    - 公钥格式：SubjectPublicKeyInfo (SPKI) DER → base64 / Public key format: SPKI DER → base64
+
+Privy Dashboard 注册步骤 / Dashboard Registration Steps:
+    1. 前往 https://dashboard.privy.io → 你的 App → Wallets → Authorization keys
+    2. 点击 "New key" → 选择 "Register key quorum instead"
+    3. 粘贴下面输出的公钥（PUBLIC KEY for Privy Dashboard）
+    4. 设置 Authorization threshold = 1
+    5. 保存生成的 Key Quorum ID，填入 .env 的 PRIVY_KEY_QUORUM_ID
+"""
+
+import base64
+import sys
+
+try:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+except ImportError:
+    print("错误 / Error: cryptography 库未安装")
+    print("请运行 / Please run: pip install cryptography")
+    sys.exit(1)
+
+
+def generate_p256_keypair() -> tuple[str, str]:
+    """
+    生成 P256 密钥对，返回 Privy 所需格式。
+    Generates a P256 keypair and returns it in Privy's required format.
+
+    Returns:
+        tuple: (authorization_key, public_key_b64)
+            - authorization_key: "wallet-auth:" 前缀 + base64 编码的 PKCS8 DER 私钥
+              用于 .env 的 PRIVY_AUTHORIZATION_KEY 字段
+            - public_key_b64: base64 编码的 SPKI DER 公钥
+              用于在 Privy Dashboard 注册
+    """
+    # 生成 P256（prime256v1 / secp256r1）私钥
+    # Generate P256 (prime256v1 / secp256r1) private key
+    private_key = ec.generate_private_key(ec.SECP256R1())
+
+    # 导出私钥为 PKCS8 DER 格式（未加密）
+    # Export private key as PKCS8 DER format (unencrypted)
+    private_key_der = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    # Privy 要求的私钥格式：wallet-auth:<base64(PKCS8 DER)>
+    # Privy required private key format: wallet-auth:<base64(PKCS8 DER)>
+    private_key_b64 = base64.b64encode(private_key_der).decode("utf-8")
+    authorization_key = f"wallet-auth:{private_key_b64}"
+
+    # 导出公钥为 SubjectPublicKeyInfo (SPKI) DER 格式
+    # Export public key as SubjectPublicKeyInfo (SPKI) DER format
+    public_key = private_key.public_key()
+    public_key_der = public_key.public_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    public_key_b64 = base64.b64encode(public_key_der).decode("utf-8")
+
+    return authorization_key, public_key_b64
+
+
+def main():
+    print("=" * 70)
+    print("Privy P256 Authorization Key Generator")
+    print("=" * 70)
+    print()
+
+    authorization_key, public_key_b64 = generate_p256_keypair()
+
+    print("【步骤 1 / Step 1】将以下私钥填入 .env 文件 / Add to .env:")
+    print("  变量名 / Variable: PRIVY_AUTHORIZATION_KEY")
+    print()
+    print(f"  {authorization_key}")
+    print()
+    print("-" * 70)
+    print()
+    print("【步骤 2 / Step 2】将以下公钥注册到 Privy Dashboard / Register in Privy Dashboard:")
+    print("  路径 / Path: Dashboard → Your App → Wallets → Authorization keys → New key")
+    print("  选择 / Select: 'Register key quorum instead'")
+    print()
+    print(f"  PUBLIC KEY for Privy Dashboard:")
+    print(f"  {public_key_b64}")
+    print()
+    print("-" * 70)
+    print()
+    print("【步骤 3 / Step 3】保存 Key Quorum ID / Save Key Quorum ID:")
+    print("  注册成功后，将 Privy Dashboard 显示的 Key Quorum ID 填入 .env:")
+    print("  After registration, add the Key Quorum ID shown in Privy Dashboard to .env:")
+    print("  变量名 / Variable: PRIVY_KEY_QUORUM_ID")
+    print()
+    print("⚠️  警告 / WARNING:")
+    print("  私钥只显示一次，请立即安全保存！/ Private key shown only once, save it securely!")
+    print("  Privy 不存储私钥，丢失无法找回。/ Privy does not store private keys; cannot be recovered.")
+    print("=" * 70)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,56 @@
+# Environment variables - NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# Test user credentials - NEVER commit these
+scripts/test_user_info.json
+
+# Private keys - NEVER commit these
+*.pem
+*.key
+private_key.txt
+auth_key.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+venv/
+env/
+.venv/
+ENV/
+.pytest_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+*.log
+
+# Flutter / Dart
+flutter_demo/.dart_tool/
+flutter_demo/.flutter-plugins
+flutter_demo/.flutter-plugins-dependencies
+flutter_demo/build/
+flutter_demo/.packages
+flutter_demo/pubspec.lock
+flutter_demo/android/.gradle/
+flutter_demo/android/local.properties
+flutter_demo/android/app/google-services.json
+flutter_demo/ios/Pods/
+flutter_demo/ios/.symlinks/
+flutter_demo/ios/Flutter/Flutter.framework
+flutter_demo/ios/Flutter/Flutter.podspec
+flutter_demo/**/*.g.dart
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
