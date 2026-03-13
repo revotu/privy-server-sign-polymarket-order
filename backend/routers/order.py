@@ -61,10 +61,10 @@ class DeriveCredentialsResponse(BaseModel):
 
     success: bool
     api_key: str
-    # 注意：api_secret 和 api_passphrase 不应返回给前端！
-    # Note: api_secret and api_passphrase should NOT be returned to frontend!
-    # 此处仅为 demo 演示，生产环境应存储在服务端
-    # This is for demo only; in production store on server side
+    # Demo 模式返回 secret 供前端存储；生产环境应存储在服务端数据库，不返回给前端
+    # Demo returns secret for frontend storage; production should store server-side, not return to frontend
+    api_secret: str = ""
+    api_passphrase: str = ""
     message: str
 
 
@@ -206,6 +206,8 @@ async def derive_clob_credentials(request: DeriveCredentialsRequest):
         return DeriveCredentialsResponse(
             success=True,
             api_key=credentials["api_key"],
+            api_secret=credentials["api_secret"],
+            api_passphrase=credentials["api_passphrase"],
             message=(
                 f"CLOB API 凭据派生成功（api_key: {credentials['api_key'][:8]}...）/ "
                 f"CLOB credentials derived successfully (api_key: {credentials['api_key'][:8]}...)"

@@ -96,6 +96,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadPersistedState() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
+      // signer_bound 通过本地存储跟踪（新版 SDK 的 EmbeddedEthereumWallet 无 delegated 字段）
+      // Track signer_bound via local storage (new SDK's EmbeddedEthereumWallet has no delegated field)
       _signerBound = prefs.getBool('signer_bound') ?? false;
       _clobApiKey = prefs.getString('clob_api_key') ?? '';
       _clobApiSecret = prefs.getString('clob_api_secret') ?? '';

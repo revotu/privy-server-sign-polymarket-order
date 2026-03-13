@@ -18,8 +18,8 @@ dependencies:
 
   # Privy Flutter SDK
   # 官方 Privy Flutter SDK / Official Privy Flutter SDK
-  # 文档 / Docs: https://docs.privy.io/sdks/flutter/setup
-  privy: ^1.0.0
+  # 文档 / Docs: https://docs.privy.io/basics/flutter/installation
+  privy_flutter: ^0.6.0
 
   # HTTP 客户端（调用后端 API）/ HTTP client (for backend API calls)
   http: ^1.2.0

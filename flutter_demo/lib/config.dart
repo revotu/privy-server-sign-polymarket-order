@@ -18,9 +18,14 @@ class AppConfig {
 
   /// Privy App ID（公开值，从 https://dashboard.privy.io 获取）
   /// Privy App ID (public value, get from https://dashboard.privy.io)
+  static const String privyAppId = 'cmkff26ru00zcjo0cwcfy3def';
+
+  /// Privy App Client ID（从 Dashboard > App Settings > Clients 创建并获取）
+  /// Privy App Client ID (create and get from Dashboard > App Settings > Clients)
   ///
-  /// 替换为你的真实 App ID / Replace with your real App ID
-  static const String privyAppId = 'YOUR_PRIVY_APP_ID_HERE';
+  /// ⚠️ 需要在 Privy Dashboard 手动创建一个 Flutter Client 才能获取此 ID
+  /// ⚠️ Must manually create a Flutter Client in Privy Dashboard to get this ID
+  static const String privyAppClientId = 'client-WY6V7jxg3DV5raFGn7TS6h6paDDHTeA69xqppVeA5C6Ds';
 
   // ----------------------------------------------------------
   // 后端 API 配置 / Backend API Configuration
@@ -50,6 +55,8 @@ class AppConfig {
   ///
   /// 示例：Will Dogecoin hit $1 before 2025?
   /// Example: Will Dogecoin hit $1 before 2025?
+  /// 使用 /sampling-markets 中的活跃市场（Cap on gambling loss deductions）
+  /// Uses an active market from /sampling-markets
   static const String demoConditionId =
-      '0xdd22472e552920b8438158ea7238bfadfa4f736aa4cee3a7386ad423d9dd9b';
+      '0x5a8c5193008f76941e75598a31ef2915125ef0a8a7cfcb7369e8c451511c4452';
 }
