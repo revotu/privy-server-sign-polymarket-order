@@ -24,7 +24,7 @@ CLOB API 凭据派生流程 / CLOB API Credentials Derivation Flow:
 import hashlib
 import hmac
 import time
-from base64 import b64encode
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 
 import httpx
 
@@ -69,7 +69,7 @@ def build_clob_auth_typed_data(wallet_address: str, timestamp: str, nonce: int =
     return {
         "domain": CLOB_AUTH_DOMAIN,
         "types": CLOB_AUTH_TYPES,
-        "primaryType": "ClobAuth",
+        "primary_type": "ClobAuth",
         "message": {
             "address": wallet_address,
             "timestamp": timestamp,
@@ -115,7 +115,7 @@ def derive_api_credentials(
     )
 
     with httpx.Client() as client:
-        response = client.post(
+        response = client.get(
             f"{settings.polymarket_clob_host}/auth/derive-api-key",
             headers=headers,
         )
@@ -158,6 +158,7 @@ def build_l2_headers(
     method: str,
     request_path: str,
     body: str = "",
+    wallet_address: str = "",
 ) -> dict:
     """
     构建 Polymarket CLOB API L2 认证请求头（HMAC-SHA256）。
@@ -197,7 +198,7 @@ def build_l2_headers(
 
     return {
         "Content-Type": "application/json",
-        "POLY_ADDRESS": "",  # L2 不需要地址 / L2 doesn't need address
+        "POLY_ADDRESS": wallet_address,
         "POLY_SIGNATURE": signature,
         "POLY_TIMESTAMP": timestamp,
         "POLY_API_KEY": api_key,
@@ -217,9 +218,16 @@ def _hmac_signature(secret: str, message: str) -> str:
     Returns:
         base64 编码的 HMAC-SHA256 签名 / Base64-encoded HMAC-SHA256 signature
     """
+    # Polymarket 的 api_secret 是 URL-safe base64（含 - 和 _），需用 urlsafe_b64decode 解码
+    # Polymarket's api_secret is URL-safe base64 (with - and _); use urlsafe_b64decode
+    # Polymarket api_secret 是 URL-safe base64，解码得到原始字节作为 HMAC 密钥
+    # Polymarket api_secret is URL-safe base64; decode to raw bytes for HMAC key
+    secret_bytes = urlsafe_b64decode(secret)
     hashed = hmac.new(
-        secret.encode("utf-8"),
+        secret_bytes,
         message.encode("utf-8"),
         digestmod=hashlib.sha256,
     )
-    return b64encode(hashed.digest()).decode("utf-8")
+    # 签名输出也用 URL-safe base64（与 py-clob-client 保持一致）
+    # Signature output also uses URL-safe base64 (consistent with py-clob-client)
+    return urlsafe_b64encode(hashed.digest()).decode("utf-8")

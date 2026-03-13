@@ -5,7 +5,7 @@ Polymarket 订单构建器 / Polymarket Order Builder
 Builds EIP-712 order structures conforming to Polymarket CLOB API spec.
 
 Polymarket Order 的 EIP-712 结构 / EIP-712 structure:
-    - Domain: ClobAuthDomain / version: 1 / chainId: 137 (Polygon mainnet)
+    - Domain: Polymarket CTF Exchange / version: 1 / chainId: 137 (Polygon mainnet)
     - Type: Order（包含 12 个字段，详见下方类型定义）
     - 合约地址 / Contract: CTF Exchange 或 NegRisk CTF Exchange
 
@@ -40,10 +40,14 @@ from config import settings
 # EIP-712 类型定义 / EIP-712 Type Definitions
 # ============================================================
 
-# EIP-712 Domain（与 CTF Exchange 合约保持一致）
-# EIP-712 Domain (must match CTF Exchange contract)
+# EIP-712 Domain（必须与 CTF Exchange 合约的 domain 完全匹配）
+# EIP-712 Domain (must exactly match CTF Exchange contract's domain)
+# 注意：domain name 是 "Polymarket CTF Exchange"，与 CLOB API 认证用的 "ClobAuthDomain" 不同！
+# Note: domain name is "Polymarket CTF Exchange", different from "ClobAuthDomain" used for CLOB API auth!
 POLYMARKET_EIP712_DOMAIN = {
-    "name": "ClobAuthDomain",
+    # 注意：domain name 必须是 "Polymarket CTF Exchange"（参考 py-order-utils BaseBuilder._get_domain_separator）
+    # Note: domain name must be "Polymarket CTF Exchange" (per py-order-utils BaseBuilder._get_domain_separator)
+    "name": "Polymarket CTF Exchange",
     "version": "1",
     "chainId": 137,  # Polygon mainnet
 }
@@ -141,9 +145,9 @@ def build_order_message(
     Returns:
         符合 EIP-712 Order 类型的 message 字典 / EIP-712 Order type message dictionary
     """
-    # 随机 salt 确保每笔订单都有唯一签名
-    # Random salt ensures each order has a unique signature
-    salt = random.randint(1, 2**128)
+    # 随机 salt 确保每笔订单都有唯一签名（与 py-order-utils generate_seed 保持一致，上限 2^32）
+    # Random salt ensures each order has a unique signature (matches py-order-utils generate_seed, max 2^32)
+    salt = random.randint(1, 2**32)
 
     # 计算链上金额 / Calculate on-chain amounts
     usdc_amount = price * size
@@ -159,8 +163,12 @@ def build_order_message(
         maker_amount = int(size * (10 ** 6))
         taker_amount = usdc_to_wei(usdc_amount)
 
+    # 注意：uint256 大整数（salt, tokenId）必须以字符串传给 Privy JSON API，
+    # 避免 JavaScript JSON.parse 的 Number 精度截断（> 2^53 时溢出）。
+    # Note: Large uint256 values (salt, tokenId) must be passed as strings to Privy JSON API,
+    # to avoid JavaScript JSON.parse Number precision truncation (overflow > 2^53).
     return {
-        "salt": salt,
+        "salt": str(salt),
         "maker": maker_address,
         # EOA 直签时 signer 与 maker 相同
         # For EOA direct signing, signer equals maker
@@ -168,12 +176,12 @@ def build_order_message(
         # 零地址 = 任何人都可以 taker（公开订单）
         # Zero address = anyone can be taker (public order)
         "taker": ZERO_ADDRESS,
-        "tokenId": int(token_id),
-        "makerAmount": maker_amount,
-        "takerAmount": taker_amount,
-        "expiration": expiration,
-        "nonce": nonce,
-        "feeRateBps": fee_rate_bps,
+        "tokenId": str(int(token_id)),
+        "makerAmount": str(maker_amount),
+        "takerAmount": str(taker_amount),
+        "expiration": str(expiration),
+        "nonce": str(nonce),
+        "feeRateBps": str(fee_rate_bps),
         "side": SIDE_BUY if side == "BUY" else SIDE_SELL,
         # 本 demo 使用 EOA 直签（signatureType=0）
         # This demo uses EOA direct signing (signatureType=0)
@@ -222,7 +230,7 @@ def build_eip712_typed_data(
         # 类型定义 / Type definitions
         "types": POLYMARKET_EIP712_TYPES,
         # 主类型 / Primary type being signed
-        "primaryType": "Order",
+        "primary_type": "Order",
         # 订单数据 / Order data
         "message": order_message,
     }
@@ -245,7 +253,9 @@ def build_signed_order_payload(
         符合 Polymarket CLOB API 格式的签名订单 / Signed order in Polymarket CLOB API format
     """
     return {
-        "salt": str(order_message["salt"]),
+        # salt 发整数，与 py-order-utils SignedOrder.dict() 保持一致（不转字符串）
+        # salt sent as integer, consistent with py-order-utils SignedOrder.dict() (not string)
+        "salt": int(order_message["salt"]),
         "maker": order_message["maker"],
         "signer": order_message["signer"],
         "taker": order_message["taker"],
@@ -255,7 +265,9 @@ def build_signed_order_payload(
         "expiration": str(order_message["expiration"]),
         "nonce": str(order_message["nonce"]),
         "feeRateBps": str(order_message["feeRateBps"]),
-        "side": order_message["side"],
+        # side 必须是字符串 "BUY"/"SELL"，而非整数 0/1（参考 py-order-utils SignedOrder.dict()）
+        # side must be string "BUY"/"SELL", not integer 0/1 (per py-order-utils SignedOrder.dict())
+        "side": "BUY" if order_message["side"] == SIDE_BUY else "SELL",
         "signatureType": order_message["signatureType"],
         # 签名字段 / Signature field
         "signature": signature,

@@ -118,6 +118,7 @@ class ClobApiClient:
         self,
         signed_order: dict,
         order_type: str = "GTC",
+        wallet_address: str = "",
     ) -> dict:
         """
         提交已签名的订单到 Polymarket CLOB。
@@ -150,7 +151,11 @@ class ClobApiClient:
         request_path = "/order"
         body_data = {
             "order": signed_order,
+            # owner 字段必须等于 API Key（参考 py-clob-client order_to_json）
+            # owner field must equal API Key (per py-clob-client order_to_json)
+            "owner": self._api_key,
             "orderType": order_type,
+            "postOnly": False,
         }
         body_str = json.dumps(body_data, separators=(",", ":"))
 
@@ -163,6 +168,7 @@ class ClobApiClient:
             method="POST",
             request_path=request_path,
             body=body_str,
+            wallet_address=wallet_address,
         )
 
         with httpx.Client() as client:

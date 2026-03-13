@@ -317,7 +317,7 @@ async def place_order(request: PlaceOrderRequest):
 
         # 步骤 7: 提交到 Polymarket CLOB
         # Step 7: Submit to Polymarket CLOB
-        result = clob.submit_order(signed_order, order_type=request.order_type)
+        result = clob.submit_order(signed_order, order_type=request.order_type, wallet_address=request.wallet_address)
 
         return PlaceOrderResponse(
             success=result.get("success", False),

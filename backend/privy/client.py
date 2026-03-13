@@ -201,7 +201,12 @@ class PrivyWalletClient:
                 auth=self._auth,
                 headers=headers,
             )
-            response.raise_for_status()
+            if not response.is_success:
+                raise httpx.HTTPStatusError(
+                    f"Privy sign_typed_data failed {response.status_code}: {response.text}",
+                    request=response.request,
+                    response=response,
+                )
             result = response.json()
 
         # Privy 返回格式：{"method": "eth_signTypedData_v4", "data": {"signature": "0x...", "encoding": "hex"}}
