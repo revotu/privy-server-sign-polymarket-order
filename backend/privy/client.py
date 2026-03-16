@@ -54,6 +54,54 @@ class PrivyWalletClient:
         """构建 wallet 资源 URL / Build wallet resource URL"""
         return f"{settings.privy_api_base_url}/wallets/{wallet_id}"
 
+    def authenticate_wallet(self, user_jwt: str) -> str:
+        """
+        用用户 JWT 换取 Privy authorization_key（短期授权令牌）。
+        Exchange user JWT for a Privy authorization_key (short-lived authorization token).
+
+        流程说明 / Flow:
+            Privy 默认禁止直接用 user JWT 执行 wallet 写操作（如添加 signer）。
+            需先调用此接口，将 user JWT 换成 authorization_key，再用 authorization_key
+            作为 privy-authorization-jwt 头执行写操作。
+            By default Privy disables using user JWT directly for wallet write operations (e.g., add signer).
+            Must first call this endpoint to exchange user JWT for authorization_key, then use
+            authorization_key as privy-authorization-jwt header for write operations.
+
+        ⚠️  前置条件 / Prerequisite:
+            此接口需要 Privy 为你的 App 开通权限，默认关闭。
+            未开通时返回：{"error": "Invalid JWT token provided", "code": "invalid_data"}
+            联系 Privy 支持申请开通后才能使用。
+            This endpoint requires Privy to enable access for your app (disabled by default).
+            Without access, returns: {"error": "Invalid JWT token provided", "code": "invalid_data"}
+            Contact Privy support to request access.
+
+        Args:
+            user_jwt: 用户的 Privy access token（从 Flutter SDK 获取）
+                      User's Privy access token (obtained from Flutter SDK)
+
+        Returns:
+            authorization_key 字符串，用作后续请求的 privy-authorization-jwt 头
+            authorization_key string, used as privy-authorization-jwt header in subsequent requests
+
+        Raises:
+            httpx.HTTPStatusError: 如果认证失败（含未开通权限的情况）/ If authentication fails
+        """
+        url = f"{settings.privy_api_base_url}/wallets/authenticate"
+
+        body = {"user_jwt": user_jwt}
+
+        with httpx.Client() as client:
+            response = client.post(
+                url,
+                json=body,
+                auth=self._auth,
+                headers=self._base_headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        return data["authorization_key"]
+
     def add_signer_to_wallet(
         self,
         wallet_id: str,
@@ -65,10 +113,10 @@ class PrivyWalletClient:
         Adds server Key Quorum as a signer on the user's wallet (one-time operation).
 
         流程说明 / Flow:
-            用户是 wallet 的 owner，因此修改 wallet 配置（添加 signer）需要用户授权。
-            授权方式：在请求头中包含 privy-authorization-jwt（用户的 JWT）。
-            The user is the wallet owner, so modifying wallet config (adding signers) requires user auth.
-            Authorization method: include privy-authorization-jwt header (user's JWT).
+            1. 调用 authenticate_wallet(user_jwt) 换取 authorization_key
+               Call authenticate_wallet(user_jwt) to get authorization_key
+            2. 以 authorization_key 作为 privy-authorization-jwt 头发送 PATCH 请求
+               Send PATCH request with authorization_key as privy-authorization-jwt header
 
         添加成功后，服务端即可用 P256 授权密钥代替用户签名（无弹窗）。
         After success, the server can sign on behalf of the user with P256 auth key (no popup).
@@ -87,6 +135,10 @@ class PrivyWalletClient:
         Raises:
             httpx.HTTPStatusError: 如果 API 请求失败 / If API request fails
         """
+        # Step 1: user_jwt → authorization_key（通过 /v1/wallets/authenticate）
+        # Step 1: user_jwt → authorization_key (via /v1/wallets/authenticate)
+        authorization_key = self.authenticate_wallet(user_jwt)
+
         url = self._get_wallet_url(wallet_id)
 
         # 请求体：添加 Key Quorum 作为 signer，不附加 policy（即无限制）
@@ -102,13 +154,11 @@ class PrivyWalletClient:
             ]
         }
 
-        # 用户 JWT 签名：由于用户是 wallet owner，此 PATCH 请求需要用户身份证明
-        # User JWT signature: since user is wallet owner, this PATCH requires user identity proof
-        # 通过在请求头中附带 privy-authorization-jwt 实现
-        # Achieved by including privy-authorization-jwt in request headers
+        # Step 2: 用 authorization_key 而非原始 user_jwt 作为授权头
+        # Step 2: use authorization_key (not raw user_jwt) as the authorization header
         headers = {
             **self._base_headers,
-            "privy-authorization-jwt": user_jwt,
+            "privy-authorization-jwt": authorization_key,
         }
 
         with httpx.Client() as client:

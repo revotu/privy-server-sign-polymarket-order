@@ -6,6 +6,7 @@ Handles Polymarket order-related API endpoints.
 
 端点 / Endpoints:
     GET  /api/markets/{condition_id}       获取市场信息
+    POST /api/bind-signer                  首次 onboarding：将服务端 Key Quorum 绑定到用户钱包（需要 user JWT）
     POST /api/derive-clob-credentials      派生 CLOB API 凭据（首次需要）
     POST /api/place-order                  服务端签名并提交订单（核心功能，无弹窗）
 
@@ -132,9 +133,78 @@ class PlaceOrderResponse(BaseModel):
     signature: str = ""
 
 
+class BindSignerRequest(BaseModel):
+    """绑定服务端 signer 的请求体 / Request body for binding server signer"""
+
+    # 用户的 Privy wallet ID / User's Privy wallet ID
+    wallet_id: str
+
+    # 用户的 Privy access token（JWT，从 Flutter SDK 获取）
+    # User's Privy access token (JWT, obtained from Flutter SDK)
+    user_jwt: str
+
+
+class BindSignerResponse(BaseModel):
+    """绑定服务端 signer 的响应体 / Response body for binding server signer"""
+
+    success: bool
+
+    # 绑定的 Key Quorum ID / Bound Key Quorum ID
+    key_quorum_id: str = ""
+
+    # 提示信息 / Info message
+    message: str = ""
+
+
 # ============================================================
 # 路由处理器 / Route Handlers
 # ============================================================
+
+@router.post("/bind-signer", response_model=BindSignerResponse)
+async def bind_signer(request: BindSignerRequest):
+    """
+    将服务端 Key Quorum 绑定到用户钱包（首次 onboarding 时调用一次）。
+    Binds server Key Quorum to user wallet (call once during first-time onboarding).
+
+    绑定后服务端即可无弹窗代替用户签名（sign_typed_data）。
+    After binding, the server can sign on behalf of the user without popups.
+
+    ⚠️  前置条件 / Prerequisite:
+        此接口依赖 Privy 为你的 App 开通「通过 user JWT 执行 wallet 写操作」的权限。
+        默认情况下该权限关闭，调用会返回：
+            {"error": "Invalid JWT token provided", "code": "invalid_data"}
+        需联系 Privy 支持团队申请开通后才能正常使用。
+
+        This endpoint requires Privy to enable "wallet write operations via user JWT" for your app.
+        By default this is disabled, and calls will return:
+            {"error": "Invalid JWT token provided", "code": "invalid_data"}
+        Contact Privy support to request access before using this endpoint.
+
+    流程 / Flow:
+        1. 前端（Flutter SDK）获取 user access token（JWT）
+        2. 前端将 wallet_id + user_jwt 传给此接口
+        3. 后端调用 /v1/wallets/authenticate 将 user_jwt 换成 authorization_key
+        4. 后端用 authorization_key 调用 Privy PATCH /wallets/{wallet_id} 添加 signer
+        5. 后续所有签名操作无需再传 user_jwt
+    """
+    try:
+        from config import settings
+        result = privy_client.add_signer_to_wallet(
+            wallet_id=request.wallet_id,
+            key_quorum_id=settings.privy_key_quorum_id,
+            user_jwt=request.user_jwt,
+        )
+        return BindSignerResponse(
+            success=True,
+            key_quorum_id=settings.privy_key_quorum_id,
+            message="signer 绑定成功，后续签名无需用户参与 / Signer bound, future signing needs no user interaction",
+        )
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"绑定 signer 失败 / Failed to bind signer: {e.response.text}",
+        )
+
 
 @router.get("/markets/{condition_id}")
 async def get_market(condition_id: str):
