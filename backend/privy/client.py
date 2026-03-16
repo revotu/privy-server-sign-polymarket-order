@@ -213,6 +213,74 @@ class PrivyWalletClient:
         # Privy response format: {"method": "eth_signTypedData_v4", "data": {"signature": "0x...", "encoding": "hex"}}
         return result["data"]["signature"]
 
+    def sign_message(
+        self,
+        wallet_id: str,
+        message_hash: str,
+    ) -> str:
+        """
+        使用 personal_sign 对消息哈希签名（用于 Safe execTransaction 签名）。
+        Signs a message hash using personal_sign (used for Safe execTransaction signing).
+
+        与 sign_typed_data 不同，此方法使用 personal_sign（添加 "\x19Ethereum Signed Message:\n32" 前缀）。
+        Unlike sign_typed_data, this uses personal_sign (adds "\x19Ethereum Signed Message:\n32" prefix).
+
+        在 Gnosis Safe 中，v=31/32 的签名（从 personal_sign 的 v=27/28 加 4 得到）
+        对应 eth_sign 类型验证，Safe 会以此类型恢复签名者地址。
+        In Gnosis Safe, v=31/32 signatures (personal_sign v=27/28 + 4) correspond
+        to eth_sign type verification, which Safe uses to recover the signer address.
+
+        Args:
+            wallet_id: Privy wallet ID
+            message_hash: 消息哈希（十六进制字符串，0x 前缀）/ Message hash (hex string, 0x-prefixed)
+
+        Returns:
+            十六进制格式的签名（0x 前缀）/ Hex-format signature (0x-prefixed)
+        """
+        url = self._get_wallet_rpc_url(wallet_id)
+
+        body = {
+            "chain_type": "ethereum",
+            "method": "personal_sign",
+            "params": {
+                # ★ 关键：必须去掉 "0x" 前缀！Privy 收到带 "0x" 的 hex 时恢复地址错误。
+                # ★ Key: must strip "0x" prefix! Privy recovers wrong address when "0x" is included.
+                "message": message_hash[2:] if message_hash.startswith("0x") else message_hash,
+                "encoding": "hex",
+            },
+        }
+
+        authorization_signature = compute_authorization_signature(
+            url=url,
+            body=body,
+            app_id=settings.privy_app_id,
+            authorization_key=settings.privy_authorization_key,
+            method="POST",
+        )
+
+        headers = {
+            **self._base_headers,
+            "privy-authorization-signature": authorization_signature,
+        }
+
+        with httpx.Client() as client:
+            response = client.post(
+                url,
+                json=body,
+                auth=self._auth,
+                headers=headers,
+            )
+            if not response.is_success:
+                raise httpx.HTTPStatusError(
+                    f"Privy sign_message failed {response.status_code}: {response.text}",
+                    request=response.request,
+                    response=response,
+                )
+            result = response.json()
+
+        # Privy 返回格式：{"method": "personal_sign", "data": {"signature": "0x...", "encoding": "hex"}}
+        return result["data"]["signature"]
+
     def get_user_wallets(self, user_did: str) -> list[dict]:
         """
         获取用户的所有 wallet 信息。

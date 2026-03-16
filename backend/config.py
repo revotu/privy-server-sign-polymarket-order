@@ -67,6 +67,41 @@ class Settings(BaseSettings):
     # NegRisk CTF Exchange 合约地址（多结果市场）/ NegRisk CTF Exchange contract (multi-outcome markets)
     polymarket_neg_risk_ctf_exchange_address: str = "0xC5d563A36AE78145C45a50134d48A1215220f80a"
 
+    # NegRisk Adapter 合约地址（CLOB 验证 neg_risk 市场余额时也检查此地址的 allowance）
+    # NegRisk Adapter contract address (CLOB also checks allowance to this address for neg_risk markets)
+    polymarket_neg_risk_adapter_address: str = "0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296"
+
+    # ----------------------------------------------------------
+    # Builder API 凭据（从 Polymarket Builder Profile 获取）
+    # Builder API Credentials (obtained from Polymarket Builder Profile)
+    # 申请地址 / Apply at: https://docs.polymarket.com/developers/builders/builder-profile
+    # ----------------------------------------------------------
+
+    # Builder API Key
+    polymarket_builder_api_key: str = ""
+
+    # Builder API Secret（用于 HMAC-SHA256 签名）/ Builder API Secret (for HMAC-SHA256 signing)
+    polymarket_builder_secret: str = ""
+
+    # Builder API Passphrase
+    polymarket_builder_passphrase: str = ""
+
+    # ----------------------------------------------------------
+    # Safe 相关合约地址（Polygon mainnet）/ Safe Contract Addresses (Polygon mainnet)
+    # ----------------------------------------------------------
+
+    # Polymarket SafeFactory 地址（非标准 Gnosis ProxyFactory）
+    # Polymarket SafeFactory address (NOT standard Gnosis ProxyFactory)
+    # safe_wallet.py 和 relayer_client.py 均从此处读取，是唯一来源
+    # Both safe_wallet.py and relayer_client.py read from here as the single source of truth
+    safe_proxy_factory_address: str = "0xaacFeEa03eb1561C4e67d661e40682Bd20E3541b"
+
+    # USDC.e 合约地址（Polygon 主网）/ USDC.e contract address (Polygon mainnet)
+    usdc_address: str = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+
+    # Polymarket Relayer API 地址 / Polymarket Relayer API host
+    relayer_host: str = "https://relayer-v2.polymarket.com"
+
     # ----------------------------------------------------------
     # FastAPI 服务器配置 / FastAPI Server Configuration
     # ----------------------------------------------------------

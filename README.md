@@ -6,36 +6,62 @@
 >
 > A complete reference implementation demonstrating how to use Privy server-side authorization keys to place Polymarket orders without user popup confirmations.
 
+本项目包含两套下单方案 / This project includes two order schemes:
+- **EOA 方案**（`main` 分支）：maker=EOA，signatureType=0，已跑通全链路
+- **Builder/Safe 方案**（`feature/builder-safe` 分支）：maker=Safe，signatureType=2，需要 Builder API 凭据
+
 ---
 
 ## 整体架构 / Architecture
 
+### EOA 方案 / EOA Scheme (main branch)
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     整体流程 / Overall Flow                   │
+│                 EOA 方案流程 / EOA Scheme Flow                │
 ├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  [一次性初始化 / One-time Init]                               │
-│  python scripts/generate_auth_key.py                         │
-│     → 生成 P256 密钥对                                        │
-│     → 公钥注册到 Privy Dashboard 为 Key Quorum               │
-│     → 私钥存入 .env                                           │
-│                                                              │
-│  [用户首次登录 / First Login]                                 │
-│  Flutter → Privy 登录 → 获取 JWT                             │
-│  Flutter → 后端 /api/bind-signer                             │
-│  后端 → Privy PATCH /wallets/{id}（用用户 JWT 授权）           │
-│     → Key Quorum 成为 wallet 的 signer                       │
-│                                                              │
-│  [每次下单 / Each Order]                                      │
-│  Flutter → 后端 /api/place-order                             │
-│  后端 → 构建 EIP-712 订单结构                                  │
-│  后端 → Privy POST /wallets/{id}/rpc（用 P256 私钥授权）       │
-│       → Privy TEE 用用户私钥签名 EIP-712（无弹窗！）           │
-│  后端 → 提交 SignedOrder 到 Polymarket CLOB API               │
-│                                                              │
+│  [一次性初始化]  generate_auth_key.py → P256 密钥对           │
+│  [用户首次登录]  Flutter → /api/bind-signer → Key Quorum 绑定 │
+│  [每次下单]     Flutter → /api/place-order                    │
+│                 后端构建 EIP-712（maker=EOA, signatureType=0） │
+│                 Privy TEE 签名（P256 授权，无弹窗）            │
+│                 提交 SignedOrder 到 Polymarket CLOB            │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### Builder/Safe 方案 / Builder/Safe Scheme (feature/builder-safe branch)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│            Builder/Safe 方案流程 / Builder/Safe Flow          │
+├─────────────────────────────────────────────────────────────┤
+│  [一次性 onboarding]                                          │
+│  Flutter → /api/get-safe-address → 计算 Safe 地址（CREATE2）  │
+│  Flutter → /api/setup-safe                                    │
+│     → 派生 Safe 地址                                          │
+│     → 构建部署 tx → Privy 签名 → Relayer 无 gas 部署 Safe     │
+│     → 构建 USDC approve → Privy 签名 → Relayer 无 gas 授权    │
+│       (依次授权 CTF Exchange / NegRisk CTF Exchange /          │
+│        NegRisk Adapter，共 3 次)                               │
+│                                                              │
+│  [每次下单]     Flutter → /api/place-order-builder            │
+│                 构建 EIP-712（maker=Safe, signer=EOA,          │
+│                              signatureType=2）                 │
+│                 Privy TEE 签名（P256 授权，无弹窗）            │
+│                 提交 SignedOrder（L2 头 + POLY_BUILDER_* 头）   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 两套方案核心差异 / Key Differences
+
+| 维度 | EOA 方案（main） | Builder/Safe 方案（feature/builder-safe） |
+|------|----------------|------------------------------------------|
+| maker | 用户 EOA | Gnosis Safe 地址 |
+| signer | 用户 EOA | 用户 EOA（Safe owner） |
+| signatureType | 0（EOA） | 2（POLY_GNOSIS_SAFE） |
+| 额外请求头 | L2 头 | L2 头 + POLY_BUILDER_* 头 |
+| Safe 部署 | 无需 | 首次 onboarding（Relayer 无 gas） |
+| USDC 授权 | 无需 | 首次 onboarding（Relayer 无 gas） |
 
 ## 项目结构 / Project Structure
 
@@ -46,22 +72,27 @@ privy-server-sign-polymarket-order/
 ├── .gitignore                   # 排除敏感文件 / Exclude sensitive files
 │
 ├── scripts/
-│   └── generate_auth_key.py     # 生成 P256 密钥对 / Generate P256 keypair
+│   ├── generate_auth_key.py     # 生成 P256 密钥对 / Generate P256 keypair
+│   ├── test_builder_flow.py     # Builder/Safe 方案端到端测试 / Builder/Safe E2E test
+│   └── debug_safe_exec.py       # ★ 调试脚本（含 CLOB + Relayer 验证）/ Debug script
 │
 ├── backend/                     # Python FastAPI 后端 / Python FastAPI backend
 │   ├── requirements.txt
 │   ├── main.py                  # FastAPI 入口 / FastAPI entry
-│   ├── config.py                # 配置加载 / Config loading
+│   ├── config.py                # 配置加载（含 Builder/Safe 配置项）/ Config loading
 │   ├── privy/
 │   │   ├── auth_signature.py    # ★ P256 授权签名实现 / P256 auth signature
 │   │   └── client.py            # Privy REST API 封装 / Privy REST API wrapper
 │   ├── polymarket/
-│   │   ├── order_builder.py     # EIP-712 订单构建 / EIP-712 order building
+│   │   ├── order_builder.py     # EIP-712 订单构建（支持 EOA + Safe）/ EIP-712 order building
 │   │   ├── clob_auth.py         # CLOB API 认证 / CLOB API auth
-│   │   └── clob_client.py       # CLOB API 客户端 / CLOB API client
+│   │   ├── clob_client.py       # CLOB API 客户端（支持 Builder 头）/ CLOB API client
+│   │   ├── safe_wallet.py       # ★ Gnosis Safe 地址派生 / Safe address derivation
+│   │   ├── relayer_client.py    # ★ Polymarket Relayer API 客户端 / Relayer API client
+│   │   └── builder_auth.py      # ★ Builder API 认证头生成 / Builder API auth headers
 │   ├── routers/
 │   │   ├── signer.py            # POST /api/bind-signer
-│   │   └── order.py             # POST /api/place-order
+│   │   └── order.py             # 下单相关端点（EOA + Builder）/ Order endpoints
 │   └── tests/
 │       ├── test_auth_signature.py  # P256 签名单元测试
 │       └── test_full_flow.py       # 完整流程测试
@@ -121,10 +152,17 @@ cp .env.example .env
 
 `.env` 内容示例 / Example `.env` content:
 ```bash
+# Privy 配置（必填）/ Privy config (required)
 PRIVY_APP_ID=clxxxxxxxxxxxxxxxxxxxxxxxx
 PRIVY_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 PRIVY_AUTHORIZATION_KEY=wallet-auth:MIGHAgEAMBMGByqGSM49AgEGCC...
 PRIVY_KEY_QUORUM_ID=key_quorum_xxxxxxxxxxxxxxxx
+
+# Builder/Safe 方案额外配置（feature/builder-safe 分支需要）
+# Builder/Safe scheme extra config (required for feature/builder-safe branch)
+POLYMARKET_BUILDER_API_KEY=your_builder_api_key
+POLYMARKET_BUILDER_SECRET=your_builder_secret
+POLYMARKET_BUILDER_PASSPHRASE=your_builder_passphrase
 ```
 
 ### 第四步：启动后端 / Step 4: Start Backend
@@ -206,7 +244,7 @@ curl -X POST http://localhost:8000/api/bind-signer \
     "user_jwt": "eyJhbGciOiJFUzI1NiJ9..."
   }'
 
-# 下单（需要所有凭据配置好）/ Place order (needs all credentials configured)
+# EOA 方案下单 / EOA scheme order placement
 curl -X POST http://localhost:8000/api/place-order \
   -H "Content-Type: application/json" \
   -d '{
@@ -219,6 +257,75 @@ curl -X POST http://localhost:8000/api/place-order \
     "clob_api_key": "your_clob_api_key",
     "clob_api_secret": "your_clob_api_secret",
     "clob_api_passphrase": "your_clob_api_passphrase",
+    "order_type": "GTC"
+  }'
+```
+
+---
+
+## Builder/Safe 方案使用指南 / Builder/Safe Scheme Guide
+
+> 以下内容适用于 `feature/builder-safe` 分支。
+> The following applies to the `feature/builder-safe` branch.
+
+### 前置条件 / Prerequisites
+
+1. **Builder API 凭据**：在 [Polymarket Builder Profile](https://docs.polymarket.com/developers/builders/builder-profile) 申请注册
+2. 在 `.env` 中配置 `POLYMARKET_BUILDER_API_KEY`、`POLYMARKET_BUILDER_SECRET`、`POLYMARKET_BUILDER_PASSPHRASE`
+
+### 测试步骤 / Test Steps
+
+```bash
+# 切换到 Builder/Safe 分支 / Switch to Builder/Safe branch
+git checkout feature/builder-safe
+
+# 步骤 1：纯计算派生 Safe 地址（无需链上，无需 Builder 凭据）
+# Step 1: Purely compute Safe address (no chain op, no Builder credentials)
+export TEST_WALLET_ADDRESS=0xYourEOAAddress
+python scripts/test_builder_flow.py --step derive-safe
+
+# 步骤 2：首次 onboarding（部署 Safe + 授权 USDC 给 3 个合约）
+# Step 2: First-time onboarding (deploy Safe + approve USDC for 3 contracts)
+export TEST_WALLET_ID=your_privy_wallet_id
+python scripts/test_builder_flow.py --step deploy-safe
+
+# 步骤 3：Builder 方案下单
+# Step 3: Place order via Builder scheme
+export TEST_CLOB_API_KEY=your_clob_api_key
+export TEST_CLOB_API_SECRET=your_clob_api_secret
+export TEST_CLOB_API_PASSPHRASE=your_clob_api_passphrase
+export TEST_CONDITION_ID=0xYourConditionId
+python scripts/test_builder_flow.py --step place-order
+```
+
+### API 端点（Builder/Safe 分支新增）/ API Endpoints (new in Builder/Safe branch)
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/api/get-safe-address` | POST | 计算用户 Safe 地址（CREATE2，纯本地，无链上操作） |
+| `/api/setup-safe` | POST | 首次 onboarding：Relayer 无 gas 部署 Safe + 授权 USDC 给 3 个合约 |
+| `/api/place-order-builder` | POST | Builder 方案下单（maker=Safe，signatureType=2） |
+
+```bash
+# 计算 Safe 地址 / Compute Safe address
+curl -X POST http://localhost:8000/api/get-safe-address \
+  -H "Content-Type: application/json" \
+  -d '{"wallet_address": "0xYourEOAAddress"}'
+
+# Builder 方案下单 / Builder scheme order
+curl -X POST http://localhost:8000/api/place-order-builder \
+  -H "Content-Type: application/json" \
+  -d '{
+    "wallet_id": "wallet_your_wallet_id",
+    "wallet_address": "0xYourEOAAddress",
+    "safe_address": "0xYourSafeAddress",
+    "condition_id": "0x...",
+    "side": "BUY",
+    "price": 0.5,
+    "size": 1.0,
+    "clob_api_key": "...",
+    "clob_api_secret": "...",
+    "clob_api_passphrase": "...",
     "order_type": "GTC"
   }'
 ```
@@ -302,6 +409,8 @@ Body: {"method": "eth_signTypedData_v4", "params": {"typed_data": {...}}}
 - py-order-utils 0.3.0（Polymarket 订单构建）
 - py-clob-client 0.18.0（CLOB API 交互）
 - eth-account 0.13.4（EIP-712 支持）
+- py-builder-relayer-client（Relayer API 客户端、Safe 地址派生、签名工具）
+- py-builder-signing-sdk（Builder API HMAC 认证头生成）
 
 ### 前端 / Frontend
 - Flutter >= 3.16.0
@@ -319,4 +428,7 @@ Body: {"method": "eth_signTypedData_v4", "params": {"typed_data": {...}}}
 - [Privy Flutter SDK](https://docs.privy.io/sdks/flutter/setup)
 - [Polymarket CLOB API](https://docs.polymarket.com/developers/CLOB/overview)
 - [Polymarket CLOB Authentication](https://docs.polymarket.com/developers/CLOB/authentication)
+- [Polymarket Builder Profile](https://docs.polymarket.com/developers/builders/builder-profile)
 - [py-order-utils](https://github.com/Polymarket/python-order-utils)
+- [Gnosis Safe Contracts v1.3.0](https://github.com/safe-global/safe-contracts/tree/v1.3.0)
+- [safe-eth-py](https://github.com/safe-global/safe-eth-py)

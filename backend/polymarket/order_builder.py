@@ -114,6 +114,8 @@ def build_order_message(
     fee_rate_bps: int,
     expiration: int = 0,
     nonce: int = 0,
+    signer_address: str = None,
+    signature_type: int = SIG_TYPE_EOA,
 ) -> dict:
     """
     构建 Polymarket 订单的 EIP-712 message 部分。
@@ -128,8 +130,8 @@ def build_order_message(
             takerAmount = price * size（USDC 精度）
 
     Args:
-        maker_address: 用户的 EOA 地址（Privy wallet 地址）
-                       User's EOA address (Privy wallet address)
+        maker_address: 资金来源地址。EOA 方案时是用户 EOA；Safe 方案时是 Safe 地址。
+                       Funding source address. EOA address for EOA scheme; Safe address for Safe scheme.
         token_id: 市场结果 token 的 ID（从 CLOB API 市场信息获取）
                   Market outcome token ID (obtained from CLOB API market info)
         side: "BUY" 或 "SELL" / "BUY" or "SELL"
@@ -141,6 +143,12 @@ def build_order_message(
                       Fee rate (bps), must match value returned by CLOB API
         expiration: Unix 时间戳，0 表示 GTC（永不过期）/ Unix timestamp, 0 = GTC (never expires)
         nonce: 用于链上取消的 nonce，通常为 0 / Nonce for on-chain cancellation, usually 0
+        signer_address: 签名者地址。None 时默认等于 maker_address（EOA 方案）。
+                        Safe 方案时传入用户 EOA（Safe owner）。
+                        Signer address. Defaults to maker_address (EOA scheme) when None.
+                        Pass user EOA (Safe owner) for Safe scheme.
+        signature_type: 签名类型：0=EOA, 1=POLY_PROXY, 2=POLY_GNOSIS_SAFE
+                        Signature type: 0=EOA, 1=POLY_PROXY, 2=POLY_GNOSIS_SAFE
 
     Returns:
         符合 EIP-712 Order 类型的 message 字典 / EIP-712 Order type message dictionary
@@ -163,16 +171,22 @@ def build_order_message(
         maker_amount = int(size * (10 ** 6))
         taker_amount = usdc_to_wei(usdc_amount)
 
+    # signer 默认等于 maker（EOA 直签），Safe 方案时 signer 是 EOA（Safe 的 owner）
+    # signer defaults to maker (EOA direct), for Safe scheme signer is EOA (Safe owner)
+    effective_signer = signer_address if signer_address is not None else maker_address
+
     # 注意：uint256 大整数（salt, tokenId）必须以字符串传给 Privy JSON API，
     # 避免 JavaScript JSON.parse 的 Number 精度截断（> 2^53 时溢出）。
     # Note: Large uint256 values (salt, tokenId) must be passed as strings to Privy JSON API,
     # to avoid JavaScript JSON.parse Number precision truncation (overflow > 2^53).
     return {
         "salt": str(salt),
+        # maker = 资金来源（EOA 方案：EOA；Safe 方案：Safe 地址）
+        # maker = funding source (EOA scheme: EOA; Safe scheme: Safe address)
         "maker": maker_address,
-        # EOA 直签时 signer 与 maker 相同
-        # For EOA direct signing, signer equals maker
-        "signer": maker_address,
+        # signer = 实际签名者（EOA 方案：EOA；Safe 方案：EOA，即 Safe owner）
+        # signer = actual signer (EOA scheme: EOA; Safe scheme: EOA, i.e., Safe owner)
+        "signer": effective_signer,
         # 零地址 = 任何人都可以 taker（公开订单）
         # Zero address = anyone can be taker (public order)
         "taker": ZERO_ADDRESS,
@@ -183,9 +197,7 @@ def build_order_message(
         "nonce": str(nonce),
         "feeRateBps": str(fee_rate_bps),
         "side": SIDE_BUY if side == "BUY" else SIDE_SELL,
-        # 本 demo 使用 EOA 直签（signatureType=0）
-        # This demo uses EOA direct signing (signatureType=0)
-        "signatureType": SIG_TYPE_EOA,
+        "signatureType": signature_type,
     }
 
 
