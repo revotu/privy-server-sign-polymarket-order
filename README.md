@@ -6,6 +6,17 @@
 >
 > A complete reference implementation demonstrating how to use Privy server-side authorization keys to place Polymarket orders without user popup confirmations.
 
+## 分支说明 / Branch Guide
+
+本项目包含两套下单方案，分别在不同分支：
+
+| 分支 | 方案 | maker | signatureType | 说明 |
+|------|------|-------|---------------|------|
+| `main`（当前） | EOA 方案 | 用户 EOA | 0 | 简单直接，无需 Safe 和 Builder 凭据 |
+| [`feature/builder-safe`](../../tree/feature/builder-safe) | Builder/Safe 方案 | Gnosis Safe | 2 | 生产推荐方案，需要 Builder API 凭据 |
+
+> 如果你的业务场景需要 **Gnosis Safe 合约钱包 + Polymarket Builder API**（即 maker=Safe，signatureType=2），请切换到 [`feature/builder-safe`](../../tree/feature/builder-safe) 分支。
+
 ---
 
 ## 整体架构 / Architecture
